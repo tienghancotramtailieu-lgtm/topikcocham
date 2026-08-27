@@ -26,7 +26,7 @@ function findCat(id){ return ALL_CATS.find(c=>c.id===id); }
 // ===== Branches =====
 const BRANCHES = [
   { id: 'vocab-topic', kr: '어휘', label: 'Từ vựng theo chủ đề', ready: true },
-  { id: 'grammar', kr: '문법', label: 'Ngữ pháp TOPIK', ready: false },
+  { id: 'grammar', kr: '문법', label: 'Ngữ pháp TOPIK', ready: true },
   { id: 'vocab-sentence', kr: '문형', label: 'Từ vựng theo dạng câu', ready: false }
 ];
 
@@ -39,7 +39,10 @@ let state = {
   flashIndex: 0,
   flashOrder: [],
   flashFlipped: false,
-  search: ''
+  search: '',
+  gView: 'list',       // grammar: list | detail
+  gId: null,
+  gSearch: ''
 };
 
 // ===== DOM refs =====
@@ -116,6 +119,26 @@ function renderSidebar(){
       ${topicHtml ? `<div class="nav-group-title">Từ vựng theo chủ đề</div>${topicHtml}` : ''}
       ${(!placeHtml && !topicHtml) ? `<div class="nav-empty">Không tìm thấy chuyên mục nào.</div>` : ''}
     `;
+  } else if(state.branch === 'grammar'){
+    const gq = state.gSearch.trim().toLowerCase();
+    const filtered = GRAMMAR_DATA.filter(g => !gq || g.term.toLowerCase().includes(gq) || g.meaning.toLowerCase().includes(gq));
+    bodyHtml = `
+      <div class="search-box">
+        ${icon('search')}
+        <input id="gSearchInput" type="text" placeholder="Tìm ngữ pháp..." value="${state.gSearch}"/>
+      </div>
+      <div class="nav-item ${state.gView==='list'?'active':''}" data-gnav="list">
+        ${icon('home')}<div class="label">Toàn bộ 연결어미</div>
+        <div class="stamp">${GRAMMAR_DATA.length}</div>
+      </div>
+      <div class="nav-group-title">Vĩ tố liên kết (연결어미)</div>
+      ${filtered.map(g=>`
+        <div class="nav-item ${state.gView==='detail' && state.gId===g.num ? 'active':''}" data-gnav="${g.num}">
+          <div class="label kr">${g.term}<span class="vn-sub">${g.meaning}</span></div>
+        </div>
+      `).join('')}
+      ${filtered.length===0 ? `<div class="nav-empty">Không tìm thấy ngữ pháp nào.</div>` : ''}
+    `;
   } else {
     const b = BRANCHES.find(x=>x.id===state.branch);
     bodyHtml = `
@@ -128,10 +151,37 @@ function renderSidebar(){
 
   sidebarEl.innerHTML = brandBlock + bodyHtml;
 
+  sidebarEl.querySelectorAll('[data-gnav]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const nav = el.dataset.gnav;
+      if(nav==='list'){ state.gView='list'; state.gId=null; }
+      else { state.gView='detail'; state.gId=parseInt(nav,10); }
+      searchFocused = false;
+      sidebarEl.classList.remove('open');
+      render();
+      window.scrollTo(0,0);
+    });
+  });
+
+  const gsi = document.getElementById('gSearchInput');
+  if(gsi){
+    gsi.addEventListener('input', e=>{
+      state.gSearch = e.target.value;
+      gSearchFocused = true;
+      renderSidebar();
+    });
+    if(gSearchFocused){
+      gsi.focus();
+      gsi.selectionStart = gsi.selectionEnd = gsi.value.length;
+    }
+  }
+
   sidebarEl.querySelectorAll('[data-branch]').forEach(el=>{
     el.addEventListener('click', ()=>{
       state.branch = el.dataset.branch;
-      state.view = state.branch==='vocab-topic' ? 'home' : 'soon';
+      if(state.branch==='vocab-topic'){ state.view='home'; }
+      else if(state.branch==='grammar'){ state.gView='list'; state.gId=null; }
+      else { state.view='soon'; }
       state.catId = null;
       searchFocused = false;
       sidebarEl.classList.remove('open');
@@ -169,6 +219,7 @@ function renderSidebar(){
   }
 }
 let searchFocused = false;
+let gSearchFocused = false;
 
 // ===== Views =====
 function renderHome(){
@@ -443,8 +494,118 @@ function renderSoon(){
   });
 }
 
+// ===== Grammar =====
+function renderGrammarList(){
+  mainEl.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">문법 · NGỮ PHÁP TOPIK</div>
+        <div class="page-title kr">연결어미<span class="vn">Vĩ tố liên kết</span></div>
+        <div class="page-sub">${GRAMMAR_DATA.length} mục ngữ pháp — mỗi mục gồm nghĩa, giải thích, ví dụ và bài luyện tập</div>
+      </div>
+    </div>
+    <div class="grammar-grid">
+      ${GRAMMAR_DATA.map(g=>`
+        <div class="grammar-card" data-gopen="${g.num}">
+          <div class="gc-num mono">${g.num}</div>
+          <div class="gc-term kr">${g.term}</div>
+          <div class="gc-meaning">${g.meaning}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  mainEl.querySelectorAll('[data-gopen]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      state.gView='detail'; state.gId=parseInt(el.dataset.gopen,10);
+      render(); window.scrollTo(0,0);
+    });
+  });
+}
+
+function renderGrammarBlockHtml(blocks){
+  return blocks.map(blk=>{
+    if(blk[0]==='p') return `<p class="g-p">${blk[1]}</p>`;
+    if(blk[0]==='h4') return `<h4 class="g-h4">${blk[1]}</h4>`;
+    if(blk[0]==='bq') return `<div class="g-bq">${blk[1].map(l=>`<div>${l}</div>`).join('')}</div>`;
+    if(blk[0]==='ex') return `
+      <div class="g-ex">
+        <div class="g-ex-kr kr">${blk[1]}</div>
+        <div class="g-ex-vn">${blk[2]}</div>
+      </div>`;
+    return '';
+  }).join('');
+}
+
+function renderGrammarDetail(){
+  const g = GRAMMAR_DATA.find(x=>x.num===state.gId);
+  if(!g){ state.gView='list'; return renderGrammarList(); }
+  const idx = GRAMMAR_DATA.findIndex(x=>x.num===g.num);
+  const prev = GRAMMAR_DATA[idx-1];
+  const next = GRAMMAR_DATA[idx+1];
+
+  mainEl.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">문법 ${g.num}/${GRAMMAR_DATA.length}</div>
+        <div class="page-title kr">${g.term}<span class="vn">${g.meaning}</span></div>
+      </div>
+      <div class="mode-tabs">
+        <button class="fc-btn ghost" id="gPrevBtn" ${!prev?'disabled style="opacity:.35;cursor:default;"':''}>‹ Trước</button>
+        <button class="fc-btn ghost" id="gListBtn">Danh sách</button>
+        <button class="fc-btn ghost" id="gNextBtn" ${!next?'disabled style="opacity:.35;cursor:default;"':''}>Sau ›</button>
+      </div>
+    </div>
+
+    <div class="grammar-detail">
+      <div class="g-section-label">Giải thích ngữ pháp &amp; Ví dụ</div>
+      <div class="g-explain-box">
+        ${renderGrammarBlockHtml(g.blocks)}
+      </div>
+
+      <div class="g-section-label">Luyện tập</div>
+      <div class="practice-list">
+        ${g.practice.map((p,i)=>`
+          <div class="practice-item">
+            <div class="practice-num mono">Câu ${i+1}</div>
+            <div class="practice-vn-prompt">${p.vn}</div>
+            <div class="practice-hint"><span class="hint-label">Gợi ý</span> <span class="kr">${p.hint}</span></div>
+            <div class="practice-answer-row">
+              <input type="text" class="practice-input kr" placeholder="Nhập câu trả lời bằng tiếng Hàn..." data-idx="${i}"/>
+              <button class="fc-btn wide ghost practice-check" data-idx="${i}">Xem đáp án</button>
+            </div>
+            <div class="practice-answer kr" id="pAns${i}" style="display:none;">Đáp án: <b>${p.answer}</b></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('gListBtn').addEventListener('click', ()=>{
+    state.gView='list'; render(); window.scrollTo(0,0);
+  });
+  if(prev) document.getElementById('gPrevBtn').addEventListener('click', ()=>{
+    state.gId=prev.num; render(); window.scrollTo(0,0);
+  });
+  if(next) document.getElementById('gNextBtn').addEventListener('click', ()=>{
+    state.gId=next.num; render(); window.scrollTo(0,0);
+  });
+  mainEl.querySelectorAll('.practice-check').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = btn.dataset.idx;
+      const el = document.getElementById('pAns'+i);
+      el.style.display = el.style.display==='none' ? 'block' : 'none';
+    });
+  });
+}
+
 // ===== Router / render =====
 function render(){
+  if(state.branch === 'grammar'){
+    if(state.gView==='detail' && state.gId!=null) renderGrammarDetail();
+    else renderGrammarList();
+    renderSidebar();
+    return;
+  }
   if(state.branch !== 'vocab-topic'){ renderSoon(); renderSidebar(); return; }
   if(state.view==='home') renderHome();
   else if(state.view==='category') renderCategory();
