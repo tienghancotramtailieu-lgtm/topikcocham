@@ -209,21 +209,49 @@ body{
   border-radius:var(--radius);
   padding:14px 16px;
   position:relative;
-  transition:box-shadow .15s ease, transform .15s ease;
+  transition:box-shadow .15s ease, transform .15s ease, background .15s ease;
 }
 .word-card:hover{box-shadow:var(--shadow); transform:translateY(-2px);}
-.word-card .w-kr{font-family:'Noto Serif KR'; font-weight:700; font-size:17px; color:var(--pink-deep); margin-bottom:5px;}
+.word-card.is-learned{background:var(--olive-soft); border-color:#cdd9a8;}
+.word-card .w-kr{font-family:'Noto Serif KR'; font-weight:700; font-size:17px; color:var(--pink-deep); margin-bottom:5px; padding-right:52px;}
 .word-card .w-vn{font-size:13px; color:var(--ink-soft); line-height:1.45;}
 .word-card .w-ex{margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); font-size:12px; color:var(--teal);}
+.wc-actions{position:absolute; top:10px; right:10px; display:flex; gap:6px;}
 .star-btn{
-  position:absolute; top:10px; right:10px; background:none; border:none; cursor:pointer;
+  background:none; border:none; cursor:pointer;
   font-size:16px; color:#e8cdd6; line-height:1;
 }
 .star-btn.on{color:var(--pink);}
+.learn-btn{
+  background:none; border:1.5px solid #cdd9a8; border-radius:50%;
+  width:20px; height:20px; cursor:pointer; font-size:11px; font-weight:800;
+  color:#b3c481; line-height:1; display:flex; align-items:center; justify-content:center;
+  padding:0;
+}
+.learn-btn.on{background:var(--olive); border-color:var(--olive); color:#fff;}
+.star-btn.small{font-size:14px;}
+.learn-btn.small{width:18px; height:18px; font-size:10px;}
 
 .empty-note{
   text-align:center; padding:60px 20px; color:var(--ink-soft);
 }
+
+/* ===== Progress bars ===== */
+.pbar{
+  width:100%; height:5px; border-radius:999px; background:#eee3d0; overflow:hidden; margin-top:6px;
+}
+.pbar-fill{
+  height:100%; border-radius:999px;
+  background:linear-gradient(90deg, var(--olive), var(--pink));
+  transition:width .25s ease;
+}
+.nav-item-prog{display:block; padding:9px 10px;}
+.nav-item-prog .nav-item-row{display:flex; align-items:center; gap:10px;}
+.nav-item-prog .label{flex:1; min-width:0;}
+.page-progress{
+  display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12px; color:var(--ink-soft);
+}
+.page-progress .pbar{width:140px; margin-top:0; flex:none;}
 
 /* ===== Flashcard mode ===== */
 .flash-wrap{
@@ -276,6 +304,7 @@ body{
 .fc-btn:hover{background:var(--pink-deep);}
 .fc-btn.wide{width:auto; padding:0 20px; border-radius:999px; font-size:13px; font-weight:700; gap:8px;}
 .fc-btn.gold{background:#fff; color:var(--pink-deep); border:1.5px solid var(--pink);}
+.fc-btn.green{background:var(--olive); color:#fff;}
 .fc-btn.ghost{background:#fff; color:var(--pink-deep); border:1.5px solid var(--line);}
 
 /* ===== Idioms ===== */
@@ -346,11 +375,13 @@ body{
 }
 .grammar-card{
   background:var(--paper); border:1px solid var(--line); border-radius:var(--radius);
-  padding:16px; cursor:pointer; transition:.15s ease; position:relative;
+  padding:16px; padding-top:38px; cursor:pointer; transition:.15s ease; position:relative;
 }
 .grammar-card:hover{box-shadow:var(--shadow); transform:translateY(-2px); border-color:var(--pink);}
+.grammar-card.is-learned{background:var(--olive-soft); border-color:#cdd9a8;}
+.gc-actions{position:absolute; top:10px; right:10px; display:flex; gap:6px;}
 .gc-num{
-  position:absolute; top:12px; right:14px; font-size:11px; color:var(--ink-soft);
+  position:absolute; top:12px; left:16px; font-size:11px; color:var(--ink-soft);
 }
 .gc-term{font-family:'Noto Serif KR'; font-weight:800; font-size:19px; color:var(--pink-deep); margin-bottom:6px;}
 .gc-meaning{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
@@ -422,3 +453,62 @@ body{
   font-size:14px; color:var(--teal);
 }
 .practice-answer b{color:var(--pink-deep); font-family:'Noto Serif KR';}
+
+/* ===== Vocab sub-switch (Theo chủ đề / Theo dạng câu) ===== */
+.sub-switch{
+  display:flex; gap:6px; margin-bottom:16px;
+  background:#fff; border:1px solid var(--line); border-radius:10px; padding:4px;
+}
+.sub-btn{
+  flex:1; border:none; background:none; padding:8px 10px; border-radius:7px;
+  font-family:inherit; font-size:12.5px; font-weight:700; color:var(--ink-soft); cursor:pointer;
+}
+.sub-btn.active{background:var(--pink); color:#fff;}
+.sub-btn:hover:not(.active){color:var(--pink-deep);}
+
+/* ===== Site home overview cards ===== */
+.site-grid{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr));
+  gap:16px; margin-top:8px;
+}
+.site-card{
+  background:var(--paper); border:1px solid var(--line); border-radius:16px;
+  padding:22px 20px; cursor:pointer; transition:.15s ease;
+}
+.site-card:hover{transform:translateY(-3px); box-shadow:var(--shadow); border-color:var(--pink);}
+.sc-icon{
+  width:42px; height:42px; border-radius:12px; background:var(--pink-light);
+  color:var(--pink-deep); display:flex; align-items:center; justify-content:center;
+  margin-bottom:14px;
+}
+.sc-kr{font-family:'Noto Serif KR'; font-size:12px; color:var(--pink); font-weight:700; letter-spacing:.06em;}
+.sc-title{font-family:'Noto Serif KR'; font-weight:800; font-size:19px; color:var(--pink-deep); margin:4px 0 8px;}
+.sc-desc{font-size:13px; color:var(--ink-soft); line-height:1.6;}
+
+/* ===== Grammar section switcher ===== */
+.gsection-item{
+  border:1.5px solid var(--line) !important;
+  margin-bottom:6px;
+}
+.gsection-item.active{
+  border-color:var(--pink) !important;
+  background:var(--pink-light);
+}
+
+/* ===== Grammar comparison table ===== */
+.g-table-wrap{
+  overflow-x:auto; margin:12px 0 16px;
+  border:1px solid var(--pink-light); border-radius:10px;
+}
+.g-table{
+  width:100%; border-collapse:collapse; font-size:13px;
+}
+.g-table th, .g-table td{
+  border:1px solid var(--line); padding:9px 12px; text-align:center; vertical-align:middle;
+}
+.g-table th{
+  background:var(--pink-pale); color:var(--pink-deep); font-weight:700;
+}
+.g-table td:first-child, .g-table th:first-child{
+  font-family:'Noto Serif KR'; font-weight:700; color:var(--pink-deep); white-space:nowrap;
+}
