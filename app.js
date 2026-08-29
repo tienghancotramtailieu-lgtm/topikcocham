@@ -67,8 +67,20 @@ function progressBarHtml(learnedCount, total, extraClass, elId){
 }
 
 // ===== Build category index =====
-const ALL_CATS = [...VOCAB_DATA.place, ...VOCAB_DATA.topic];
+const ALL_TOPIC_CATS = [...VOCAB_DATA.place, ...VOCAB_DATA.topic];
+const ALL_DANGDE_CATS = ['3','4','5','6'].flatMap(lv => DANGDE_DATA[lv]);
+const ALL_CATS = [...ALL_TOPIC_CATS, ...ALL_DANGDE_CATS];
 function findCat(id){ return ALL_CATS.find(c=>c.id===id); }
+const DANGDE_LEVELS = [
+  { id:'3', label:'Cấp 3' }, { id:'4', label:'Cấp 4' },
+  { id:'5', label:'Cấp 5' }, { id:'6', label:'Cấp 6' }
+];
+function dangdeLevelStats(lv){
+  const cats = DANGDE_DATA[lv];
+  const totalWords = cats.reduce((s,c)=>s+c.words.length,0);
+  const learnedWords = cats.reduce((s,c)=>s+learnedCountInCat(c),0);
+  return { catCount: cats.length, totalWords, learnedWords };
+}
 
 // ===== Branches (top-level) =====
 const BRANCHES = [
@@ -92,6 +104,9 @@ let state = {
   vocabSub: 'topic',    // topic | sentence
   view: 'home',         // (vocab-topic) home | category | starred
   catId: null,
+  dView: 'levels',      // (vocab-sentence) levels | levelHome | category
+  dLevel: null,         // '3' | '4' | '5' | '6'
+  dSearch: '',
   mode: 'list',         // list | flash
   flashIndex: 0,
   flashOrder: [],
@@ -183,12 +198,12 @@ function renderVocabSidebarBody(){
   const subSwitch = `
     <div class="sub-switch">
       <button class="sub-btn ${state.vocabSub==='topic'?'active':''}" data-vsub="topic">Theo chủ đề</button>
-      <button class="sub-btn ${state.vocabSub==='sentence'?'active':''}" data-vsub="sentence">Theo dạng câu</button>
+      <button class="sub-btn ${state.vocabSub==='sentence'?'active':''}" data-vsub="sentence">Theo cấp độ</button>
     </div>
   `;
 
   if(state.vocabSub !== 'topic'){
-    return subSwitch + `<div class="nav-empty">Nội dung đang được biên soạn.</div>`;
+    return subSwitch + renderDangDeSidebarBody();
   }
 
   let placeHtml = VOCAB_DATA.place.filter(matchCat).map(c=>navItem(c.id,c.kr,c.vn,c.words.length, starCountInCat(c), learnedCountInCat(c))).join('');
@@ -209,6 +224,52 @@ function renderVocabSidebarBody(){
     ${placeHtml ? `<div class="nav-group-title">Từ vựng theo địa điểm</div>${placeHtml}` : ''}
     ${topicHtml ? `<div class="nav-group-title">Từ vựng theo chủ đề</div>${topicHtml}` : ''}
     ${(!placeHtml && !topicHtml) ? `<div class="nav-empty">Không tìm thấy chuyên mục nào.</div>` : ''}
+  `;
+}
+
+function renderDangDeSidebarBody(){
+  const dq = state.dSearch.trim().toLowerCase();
+  const levelNav = DANGDE_LEVELS.map(lv=>{
+    const stats = dangdeLevelStats(lv.id);
+    return `
+    <div class="nav-item nav-item-prog gsection-item ${state.dLevel===lv.id?'active':''}" data-dlevel="${lv.id}">
+      <div class="nav-item-row">
+        <div class="label kr">${lv.label}<span class="vn-sub">${stats.catCount} chuyên mục · ${stats.totalWords} từ</span></div>
+        <div class="stamp">${stats.totalWords}</div>
+      </div>
+      ${progressBarHtml(stats.learnedWords, stats.totalWords)}
+    </div>`;
+  }).join('');
+
+  let catListHtml = '';
+  if(state.dLevel){
+    const cats = DANGDE_DATA[state.dLevel].filter(c => !dq || c.kr.toLowerCase().includes(dq) || c.vn.toLowerCase().includes(dq));
+    catListHtml = `
+      <div class="search-box" style="margin-top:14px;">
+        ${icon('search')}
+        <input id="dSearchInput" type="text" placeholder="Tìm trong Cấp ${state.dLevel}..." value="${state.dSearch}"/>
+      </div>
+      <div class="nav-item ${state.dView==='levelHome'?'active':''}" data-dnav="levelHome">
+        ${icon('home')}<div class="label">Toàn bộ Cấp ${state.dLevel}</div>
+      </div>
+      <div class="nav-group-title">Chuyên mục — Cấp ${state.dLevel}</div>
+      ${cats.map(c=>`
+        <div class="nav-item nav-item-prog ${state.dView==='category' && state.catId===c.id?'active':''}" data-dnav="${c.id}">
+          <div class="nav-item-row">
+            <div class="label kr">${c.kr}<span class="vn-sub">${c.qtype ? c.qtype.skill_vn+' câu '+c.qtype.qnum+' · ' : ''}${c.vn}</span></div>
+            <div class="stamp">${c.words.length}</div>
+          </div>
+          ${progressBarHtml(learnedCountInCat(c), c.words.length)}
+        </div>
+      `).join('')}
+      ${cats.length===0 ? `<div class="nav-empty">Không tìm thấy chuyên mục nào.</div>` : ''}
+    `;
+  }
+
+  return `
+    <div class="nav-group-title">Chọn cấp độ</div>
+    ${levelNav}
+    ${catListHtml}
   `;
 }
 
@@ -298,7 +359,8 @@ function bindSidebarEvents(){
     el.addEventListener('click', ()=>{
       state.vocabSub = el.dataset.vsub;
       state.view = 'home'; state.catId = null;
-      searchFocused = false;
+      state.dView = 'levels'; state.dLevel = null;
+      searchFocused = false; dSearchFocused = false;
       render(); window.scrollTo(0,0);
     });
   });
@@ -311,6 +373,27 @@ function bindSidebarEvents(){
       else if(nav==='starred'){ state.view='starred'; state.mode='list'; }
       else { state.view='category'; state.catId=nav; state.mode='list'; }
       searchFocused = false;
+      sidebarEl.classList.remove('open');
+      render(); window.scrollTo(0,0);
+    });
+  });
+
+  // dangde (theo dạng câu) level switch
+  sidebarEl.querySelectorAll('[data-dlevel]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      state.dLevel = el.dataset.dlevel;
+      state.dView = 'levelHome'; state.catId = null;
+      state.dSearch=''; dSearchFocused=false;
+      sidebarEl.classList.remove('open');
+      render(); window.scrollTo(0,0);
+    });
+  });
+  // dangde category nav
+  sidebarEl.querySelectorAll('[data-dnav]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const nav = el.dataset.dnav;
+      if(nav==='levelHome'){ state.dView='levelHome'; state.catId=null; }
+      else { state.dView='category'; state.catId=nav; state.mode='list'; }
       sidebarEl.classList.remove('open');
       render(); window.scrollTo(0,0);
     });
@@ -369,11 +452,22 @@ function bindSidebarEvents(){
     });
     if(iSearchFocused){ isi.focus(); isi.selectionStart = isi.selectionEnd = isi.value.length; }
   }
+
+  const dsi = document.getElementById('dSearchInput');
+  if(dsi){
+    dsi.addEventListener('input', e=>{
+      state.dSearch = e.target.value;
+      dSearchFocused = true;
+      renderSidebar();
+    });
+    if(dSearchFocused){ dsi.focus(); dsi.selectionStart = dsi.selectionEnd = dsi.value.length; }
+  }
 }
 
 let searchFocused = false;
 let gSearchFocused = false;
 let iSearchFocused = false;
+let dSearchFocused = false;
 
 // ===== Site home (landing overview) =====
 function renderSiteHome(){
@@ -397,7 +491,7 @@ function renderSiteHome(){
         <div class="sc-icon">${icon('book')}</div>
         <div class="sc-kr kr">어휘</div>
         <div class="sc-title">Từ vựng</div>
-        <div class="sc-desc">Theo chủ đề (địa điểm, cảm xúc, xã hội...) và theo dạng câu. Có danh sách, flashcard và ví dụ mẫu.</div>
+        <div class="sc-desc">Theo chủ đề (địa điểm, cảm xúc, xã hội...) và theo cấp độ TOPIK. Có danh sách, flashcard và ví dụ mẫu.</div>
       </div>
       <div class="site-card" data-goto="grammar">
         <div class="sc-icon">${icon('grammar')}</div>
@@ -451,6 +545,77 @@ function renderVocabHome(){
   });
 }
 
+function qtypeBadgeHtml(qtype){
+  if(!qtype) return '';
+  return `
+    <div class="qtype-badge-wrap">
+      <span class="qtype-badge">${qtype.skill_vn} câu ${qtype.qnum}</span>
+      <div class="qtype-task">${qtype.task_vn}</div>
+    </div>`;
+}
+
+function renderDangDeLevels(){
+  mainEl.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">문형 · TỪ VỰNG THEO CẤP ĐỘ</div>
+        <div class="page-title kr">급별 어휘<span class="vn">Từ vựng theo cấp độ TOPIK</span></div>
+        <div class="page-sub">Chọn cấp độ để ôn từ vựng thường gặp trong từng dạng câu hỏi của đề thi — mỗi chuyên mục ghi rõ thuộc câu Nghe/Đọc/Viết nào</div>
+      </div>
+    </div>
+    <div class="site-grid">
+      ${DANGDE_LEVELS.map(lv=>{
+        const stats = dangdeLevelStats(lv.id);
+        return `
+        <div class="site-card" data-goto-level="${lv.id}">
+          <div class="sc-icon"><span class="mono" style="font-weight:800;">${lv.id}</span></div>
+          <div class="sc-kr kr">${lv.label}</div>
+          <div class="sc-title">${stats.totalWords} từ vựng</div>
+          <div class="sc-desc">${stats.catCount} chuyên mục theo dạng câu hỏi</div>
+          ${progressBarHtml(stats.learnedWords, stats.totalWords)}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  mainEl.querySelectorAll('[data-goto-level]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      state.dLevel = el.dataset.gotoLevel;
+      state.dView = 'levelHome'; state.catId = null;
+      render(); window.scrollTo(0,0);
+    });
+  });
+}
+
+function renderDangDeLevelHome(){
+  const cats = DANGDE_DATA[state.dLevel];
+  const lvMeta = DANGDE_LEVELS.find(l=>l.id===state.dLevel);
+  mainEl.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">문형 · TỪ VỰNG THEO CẤP ĐỘ</div>
+        <div class="page-title kr">${lvMeta.label}<span class="vn">Từ vựng theo cấp độ TOPIK</span></div>
+        <div class="page-sub">${cats.length} chuyên mục — ${cats.reduce((s,c)=>s+c.words.length,0)} từ vựng</div>
+      </div>
+    </div>
+    <div class="home-grid">
+      ${cats.map(c=>`
+        <div class="home-card" data-go="${c.id}">
+          ${qtypeBadgeHtml(c.qtype)}
+          <div class="hc-kr kr">${c.kr}</div>
+          <div class="hc-vn">${c.vn}</div>
+          <div class="hc-count">${c.words.length} từ · ${learnedCountInCat(c)} đã thuộc</div>
+          ${progressBarHtml(learnedCountInCat(c), c.words.length)}
+        </div>`).join('')}
+    </div>
+  `;
+  mainEl.querySelectorAll('[data-go]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      state.dView='category'; state.catId=el.dataset.go; state.mode='list';
+      render(); window.scrollTo(0,0);
+    });
+  });
+}
+
 function wordListHtml(catId, words){
   if(words.length===0) return `<div class="empty-note">Không có từ nào.</div>`;
   return `<div class="word-grid">
@@ -497,11 +662,19 @@ function renderCategory(){
   const cat = findCat(state.catId);
   if(!cat){ state.view='home'; return renderVocabHome(); }
   const learnedCount = learnedCountInCat(cat);
+  const eyebrowText = cat.qtype
+    ? `문형 · CẤP ${cat.id.match(/^d(\d)_/)[1]} · ${cat.qtype.skill_vn.toUpperCase()} CÂU ${cat.qtype.qnum}`
+    : 'CHUYÊN MỤC';
   mainEl.innerHTML = `
     <div class="page-head">
       <div>
-        <div class="eyebrow">CHUYÊN MỤC</div>
+        <div class="eyebrow">${eyebrowText}</div>
         <div class="page-title kr">${cat.kr}<span class="vn">${cat.vn}</span></div>
+        ${cat.qtype ? `
+          <div class="qtype-detail">
+            <span class="qtype-detail-kr kr">${cat.qtype.task_kr}</span>
+            <span class="qtype-detail-vn">${cat.qtype.task_vn}</span>
+          </div>` : ''}
         <div class="page-sub">${cat.words.length} từ vựng · ${starCountInCat(cat)} đã đánh dấu</div>
         <div class="page-progress">
           <span id="catProgressLabel">${learnedCount}/${cat.words.length} đã thuộc</span>
@@ -929,18 +1102,9 @@ function render(){
   }
   // vocab branch
   if(state.vocabSub !== 'topic'){
-    mainEl.innerHTML = `
-      <div class="soon-wrap">
-        <div class="soon-badge kr">문형</div>
-        <div class="eyebrow mono">SẮP RA MẮT</div>
-        <h2 class="soon-title">Từ vựng theo dạng câu</h2>
-        <p class="soon-text">Phần này đang được Cô Châm biên soạn và sẽ được bổ sung trong thời gian tới. Trong lúc chờ, học viên có thể ôn từ vựng theo chủ đề ở tab bên cạnh.</p>
-        <button class="fc-btn wide gold" id="soonGo">Đến Từ vựng theo chủ đề</button>
-      </div>`;
-    const btn = document.getElementById('soonGo');
-    if(btn) btn.addEventListener('click', ()=>{
-      state.vocabSub='topic'; state.view='home'; render(); window.scrollTo(0,0);
-    });
+    if(state.dView==='category' && state.catId){ renderCategory(); }
+    else if(state.dView==='levelHome' && state.dLevel){ renderDangDeLevelHome(); }
+    else { renderDangDeLevels(); }
     renderSidebar();
     return;
   }
