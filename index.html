@@ -7,14 +7,35 @@
 <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
+
+  <div id="loginScreen" class="login-screen">
+    <div class="login-box">
+      <div class="login-badge"><img src="logo_flower_transparent.webp" alt="Logo"/></div>
+      <div class="login-title">Tiếng Hàn Cô Châm</div>
+      <div class="login-sub">Đăng nhập để vào trang luyện thi TOPIK</div>
+      <form id="loginForm">
+        <input type="email" id="loginEmail" placeholder="Email" autocomplete="username" required/>
+        <input type="password" id="loginPassword" placeholder="Mật khẩu" autocomplete="current-password" required/>
+        <button type="submit" id="loginSubmitBtn">Đăng nhập</button>
+      </form>
+      <div id="loginError" class="login-error" style="display:none;"></div>
+      <div id="loginLoading" class="login-loading" style="display:none;">Đang kiểm tra...</div>
+    </div>
+  </div>
+
   <div class="topbar">
     <button id="menuBtn">☰</button>
     <div class="tb-title">Từ vựng TOPIK · Cô Châm</div>
   </div>
-  <div id="app">
+  <div id="app" style="display:none;">
     <nav id="sidebar"></nav>
     <main id="main"></main>
   </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script src="assets.js"></script>
   <script src="data.js"></script>
   <script src="dangde-data.js"></script>

@@ -1,6 +1,6 @@
-// ===== Storage =====
+// ===== Storage (đồng bộ theo tài khoản qua Firestore, localStorage làm cache) =====
 const LS_KEY = 'tvtopik_progress_v1';
-function loadProgress(){
+function loadProgressLocal(){
   try{
     const p = JSON.parse(localStorage.getItem(LS_KEY)) || {};
     return {
@@ -12,8 +12,44 @@ function loadProgress(){
   }
   catch(e){ return {starred:{}, learned:{}, gStarred:{}, gLearned:{}}; }
 }
-function saveProgress(p){ localStorage.setItem(LS_KEY, JSON.stringify(p)); }
-let progress = loadProgress();
+let progress = loadProgressLocal();
+let currentUser = null;
+let saveDebounceTimer = null;
+
+function saveProgress(p){
+  // cache tức thì trên máy (để UI luôn phản hồi nhanh, kể cả mất mạng)
+  localStorage.setItem(LS_KEY, JSON.stringify(p));
+  // đồng bộ lên Firestore theo tài khoản (gộp lại nếu bấm nhiều lần liên tiếp)
+  if(!currentUser) return;
+  clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(()=>{
+    db.collection('progress').doc(currentUser.uid).set(p)
+      .catch(err=>console.error('Lỗi đồng bộ tiến độ:', err));
+  }, 600);
+}
+
+async function loadProgressFromCloud(uid){
+  try{
+    const doc = await db.collection('progress').doc(uid).get();
+    if(doc.exists){
+      const d = doc.data();
+      progress = {
+        starred: d.starred || {},
+        learned: d.learned || {},
+        gStarred: d.gStarred || {},
+        gLearned: d.gLearned || {}
+      };
+    } else {
+      // tài khoản mới trên thiết bị này: dùng cache máy hiện có (nếu có) rồi đẩy lên cloud
+      progress = loadProgressLocal();
+      await db.collection('progress').doc(uid).set(progress);
+    }
+    localStorage.setItem(LS_KEY, JSON.stringify(progress));
+  } catch(err){
+    console.error('Không tải được tiến độ từ máy chủ, dùng bản lưu trên máy:', err);
+    progress = loadProgressLocal();
+  }
+}
 
 function wordKey(catId, kr){ return catId + '::' + kr; }
 function isStarred(catId, kr){ return !!progress.starred[wordKey(catId,kr)]; }
@@ -161,7 +197,9 @@ function renderSidebar(){
         <div class="t1">Tiếng Hàn Cô Châm</div>
         <div class="t2">Luyện thi TOPIK</div>
       </div>
+      <button id="logoutBtn" class="logout-btn" title="Đăng xuất">⏻</button>
     </div>
+    ${currentUser ? `<div class="user-badge">${currentUser.email}</div>` : ''}
     ${renderBranchSwitcher()}
   `;
 
@@ -178,6 +216,10 @@ function renderSidebar(){
   }
 
   sidebarEl.innerHTML = brandBlock + bodyHtml;
+  const lb = document.getElementById('logoutBtn');
+  if(lb) lb.addEventListener('click', ()=>{
+    if(confirm('Đăng xuất khỏi tài khoản?')) logout();
+  });
   bindSidebarEvents();
 }
 
@@ -1119,4 +1161,69 @@ document.getElementById('menuBtn').addEventListener('click', ()=>{
   sidebarEl.classList.toggle('open');
 });
 
-render();
+// ===== Authentication (Firebase) =====
+const loginScreenEl = document.getElementById('loginScreen');
+const appEl = document.getElementById('app');
+const loginForm = document.getElementById('loginForm');
+const loginEmailEl = document.getElementById('loginEmail');
+const loginPasswordEl = document.getElementById('loginPassword');
+const loginErrorEl = document.getElementById('loginError');
+const loginLoadingEl = document.getElementById('loginLoading');
+const loginSubmitBtn = document.getElementById('loginSubmitBtn');
+
+function showLoginScreen(){
+  loginScreenEl.style.display = 'flex';
+  appEl.style.display = 'none';
+  document.querySelector('.topbar').style.display = 'none';
+}
+function showApp(){
+  loginScreenEl.style.display = 'none';
+  appEl.style.display = 'grid';
+  document.querySelector('.topbar').style.display = '';
+}
+
+const LOGIN_ERRORS = {
+  'auth/invalid-email': 'Email không hợp lệ.',
+  'auth/user-not-found': 'Tài khoản không tồn tại. Liên hệ Cô Châm để được cấp tài khoản.',
+  'auth/wrong-password': 'Sai mật khẩu, vui lòng thử lại.',
+  'auth/invalid-credential': 'Email hoặc mật khẩu không đúng.',
+  'auth/too-many-requests': 'Bạn đã thử sai quá nhiều lần, vui lòng thử lại sau ít phút.',
+  'auth/network-request-failed': 'Lỗi kết nối mạng, vui lòng kiểm tra lại internet.'
+};
+
+loginForm.addEventListener('submit', (e)=>{
+  e.preventDefault();
+  loginErrorEl.style.display = 'none';
+  loginLoadingEl.style.display = 'block';
+  loginSubmitBtn.disabled = true;
+  const email = loginEmailEl.value.trim();
+  const pw = loginPasswordEl.value;
+  auth.signInWithEmailAndPassword(email, pw)
+    .catch(err=>{
+      loginLoadingEl.style.display = 'none';
+      loginSubmitBtn.disabled = false;
+      loginErrorEl.textContent = LOGIN_ERRORS[err.code] || 'Đăng nhập thất bại, vui lòng thử lại.';
+      loginErrorEl.style.display = 'block';
+    });
+  // khi thành công, onAuthStateChanged bên dưới sẽ tự xử lý phần còn lại
+});
+
+function logout(){
+  auth.signOut();
+}
+
+auth.onAuthStateChanged(async (user)=>{
+  if(user){
+    currentUser = user;
+    loginLoadingEl.style.display = 'block';
+    await loadProgressFromCloud(user.uid);
+    loginLoadingEl.style.display = 'none';
+    loginSubmitBtn.disabled = false;
+    loginForm.reset();
+    showApp();
+    render();
+  } else {
+    currentUser = null;
+    showLoginScreen();
+  }
+});
